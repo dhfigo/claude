@@ -2,7 +2,7 @@
 
 비개발 사무직(기획·영업·관리)이 업무 문서를 업로드하면, AI가 분석해 이력·성과 중심의 포트폴리오를 생성하는 **유료 판매용 웹서비스**.
 
-> 상태: 저장소 초기 단계. 아래 "명령어"와 "디렉터리 구조"는 목표 구조이며, 실제 스캐폴딩 후 이 문서를 갱신한다.
+> 상태: Next.js 스캐폴딩 완료(1단계). "디렉터리 구조"는 목표 구조이며 기능 구현에 따라 갱신한다.
 
 ---
 
@@ -110,7 +110,7 @@ supabase/
 
 ---
 
-## 7. 명령어 (스캐폴딩 후 확정)
+## 7. 명령어
 
 ```bash
 npm run dev          # 로컬 개발
@@ -118,8 +118,10 @@ npm run build        # 프로덕션 빌드
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
 npm test             # 단위 테스트 (마스킹·결제 검증은 필수 커버)
-npx supabase db push # 마이그레이션 적용 (승인 후에만)
+npx supabase db push # 마이그레이션 적용 (Supabase 설정 후, 승인 시에만)
 ```
+
+의존성 고정 사유: `typescript-eslint`가 TypeScript `<6.1`, `eslint-plugin-react`가 ESLint 9까지만 호환된다. **TypeScript 6.0.x, ESLint 9.x를 유지**하고, 업그레이드는 호환 확인 후 별도 계획으로 진행한다.
 
 ---
 
