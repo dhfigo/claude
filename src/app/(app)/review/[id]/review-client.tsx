@@ -1,20 +1,35 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { startAnalysis } from "../../analysis/actions";
 import { deleteOriginalNow, previewMasking, type PreviewResult } from "./actions";
 
+function parseTerms(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 export function ReviewClient({ documentId }: { documentId: string }) {
+  const router = useRouter();
+  const [consent, setConsent] = useState(false);
   const [termsText, setTermsText] = useState("");
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function runPreview() {
-    const terms = termsText
-      .split(/[\n,]/)
-      .map((t) => t.trim())
-      .filter(Boolean);
-    startTransition(async () => setResult(await previewMasking({ documentId, terms })));
+    startTransition(async () => setResult(await previewMasking({ documentId, terms: parseTerms(termsText) })));
+  }
+
+  function analyze() {
+    startTransition(async () => {
+      const res = await startAnalysis({ documentId, terms: parseTerms(termsText), consent });
+      if (res.ok) router.push(`/analysis/${res.jobId}`);
+      else setNotice(res.message);
+    });
   }
 
   function remove() {
@@ -38,6 +53,16 @@ export function ReviewClient({ documentId }: { documentId: string }) {
         </button>{" "}
         <button type="button" onClick={remove} disabled={pending}>
           원본 지금 삭제
+        </button>
+      </p>
+      <hr />
+      <label>
+        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> 마스킹된 문서 내용이
+        외부 AI 서비스(Anthropic)로 전송되는 것에 동의합니다. 미리보기에서 가려지지 않은 정보는 그대로 전송됩니다.
+      </label>
+      <p>
+        <button type="button" onClick={analyze} disabled={pending || !consent}>
+          분석 시작
         </button>
       </p>
       {notice && <p role="status">{notice}</p>}

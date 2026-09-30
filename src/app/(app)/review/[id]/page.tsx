@@ -3,6 +3,9 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { ReviewClient } from "./review-client";
 
+// 분석 서버 액션이 이 페이지에서 호출되므로 실행 시간 상한도 여기서 정한다. 300초는 요금제 한도 확인 전의 가정값이다.
+export const maxDuration = 300;
+
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
