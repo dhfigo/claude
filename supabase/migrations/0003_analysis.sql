@@ -1,6 +1,6 @@
 -- 분석 작업: 사용자당 동시 실행 1건, 일일 한도 집계용 인덱스, 모델·프롬프트 버전 기록.
 -- error_code 값: refusal, schema, truncated, too_long, rate_limited, api_error,
---                original_missing, unreadable, timeout, internal
+--                original_missing, unreadable, timeout, internal, deleted
 
 alter table public.analysis_jobs
   add column model text,

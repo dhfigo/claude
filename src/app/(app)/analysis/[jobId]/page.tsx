@@ -33,6 +33,9 @@ export default async function AnalysisPage({ params }: { params: Promise<{ jobId
       {portfolio?.success && (
         <article>
           <p>AI가 작성한 초안입니다. 내용을 반드시 확인하고 수정해 주십시오.</p>
+          <p>
+            <a href={`/portfolio/${jobId}`}>편집하고 내보내기 (Word·PDF)</a>
+          </p>
           <h2>요약</h2>
           <p>{portfolio.data.summary}</p>
           {portfolio.data.projects.map((p, i) => (

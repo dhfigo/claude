@@ -41,8 +41,14 @@ describe("마이그레이션 정적 검사 (실제 DB 접근 차단은 검증하
     expect(sql).toMatch(/delete_original boolean not null default true/);
   });
 
-  it("문서 원문·마스킹 매핑 컬럼이 없다", () => {
-    expect(sql).not.toMatch(/\b(raw_text|content|mask_map|masking_map)\b/);
+  it("문서 원문·마스킹 매핑을 담는 컬럼이 없다", () => {
+    expect(sql).not.toMatch(/\b(raw_text|extracted_text|original_text|mask_map|masking_map)\b/);
+  });
+
+  it("content 컬럼은 사용자가 편집하는 portfolios 에만 있다(문서 원문을 담는 용도가 아니다)", () => {
+    const tables = [...sql.matchAll(/create table public\.(\w+) \(([\s\S]*?)\n\);/g)];
+    const withContent = tables.filter((m) => /^\s*content\b/m.test(m[2])).map((m) => m[1]);
+    expect(withContent).toEqual(["portfolios"]);
   });
 
   it("0002: 사용자가 만료·상태·동의·스토리지를 직접 쓰는 정책을 제거한다", () => {

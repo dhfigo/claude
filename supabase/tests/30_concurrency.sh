@@ -34,4 +34,27 @@ fail() { echo "FAIL: $1"; echo "--- 세션1: $(cat "$OUT1")"; echo "--- 세션2:
 grep -q "duplicate key\|23505\|analysis_jobs_one_active_per_user" "$OUT2" || fail "세션 2 가 활성 작업 충돌로 거부되지 않음"
 [ "$(echo "$ELAPSED > 1.0" | bc)" = "1" ] || fail "세션 2 가 잠금을 기다리지 않음 (${ELAPSED}s)"
 echo "PASS: 동시 분석 시작은 한 건만 차감·생성된다 (세션 2 대기 ${ELAPSED}s)"
+
+# --- 포트폴리오 동시 저장: 같은 버전으로 두 창이 동시에 저장하면 한쪽만 반영된다 -------------------
+PJOB=c3000000-0000-0000-0000-0000000000c3
+$P <<SQL >/dev/null
+insert into public.analysis_jobs (id, user_id, document_id, status, result)
+values ('$PJOB', '$C', 'c2000000-0000-0000-0000-0000000000c2', 'succeeded', '{"summary":"초안","projects":[],"skills":[]}');
+select public.ensure_portfolio('$C', '$PJOB');
+SQL
+
+( $P -c "begin; select public.save_portfolio('$C','$PJOB','{\"summary\":\"첫번째\"}'::jsonb, 1); select pg_sleep(1.5); commit;" >"$OUT1" 2>&1 || true ) &
+sleep 0.5
+START=$(date +%s.%N)
+$P -c "select public.save_portfolio('$C','$PJOB','{\"summary\":\"두번째\"}'::jsonb, 1)" >"$OUT2" 2>&1 || true
+ELAPSED=$(echo "$(date +%s.%N) - $START" | bc)
+wait
+
+SUMMARY=$($P -c "select content ->> 'summary' from public.portfolios where job_id='$PJOB'")
+VERSION=$($P -c "select version from public.portfolios where job_id='$PJOB'")
+[ "$SUMMARY" = "첫번째" ] || fail "동시 저장 후 내용이 '${SUMMARY}' (기대: 먼저 커밋한 첫번째)"
+[ "$VERSION" = "2" ] || fail "동시 저장 후 버전이 ${VERSION} (기대 2)"
+grep -q "version_conflict" "$OUT2" || fail "두 번째 저장이 버전 충돌로 거부되지 않음"
+[ "$(echo "$ELAPSED > 0.8" | bc)" = "1" ] || fail "두 번째 저장이 행 잠금을 기다리지 않음 (${ELAPSED}s)"
+echo "PASS: 같은 버전의 동시 저장은 한쪽만 반영되고 나머지는 충돌로 거부된다 (대기 ${ELAPSED}s)"
 rm -f "$OUT1" "$OUT2"

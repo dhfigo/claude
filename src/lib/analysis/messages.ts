@@ -14,6 +14,9 @@ export const ERROR_MESSAGES: Record<AnalysisErrorCode, string> = {
   internal: "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주십시오.",
 };
 
+const DELETED_MESSAGE = "사용자가 삭제한 분석 결과입니다. 다시 분석하려면 문서를 새로 올려 주십시오.";
+
 export function errorMessageFor(code: string | null): string {
+  if (code === "deleted") return DELETED_MESSAGE;
   return ERROR_MESSAGES[(code ?? "internal") as AnalysisErrorCode] ?? ERROR_MESSAGES.internal;
 }
