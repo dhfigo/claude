@@ -44,4 +44,20 @@ describe("마이그레이션 정적 검사 (실제 DB 접근 차단은 검증하
   it("문서 원문·마스킹 매핑 컬럼이 없다", () => {
     expect(sql).not.toMatch(/\b(raw_text|content|mask_map|masking_map)\b/);
   });
+
+  it("0002: 사용자가 만료·상태·동의·스토리지를 직접 쓰는 정책을 제거한다", () => {
+    for (const name of [
+      "documents_insert_own",
+      "documents_update_own",
+      "documents_delete_own",
+      "consent_logs_insert_own",
+      "originals_insert_own",
+    ]) {
+      expect(sql, name).toMatch(new RegExp(`drop policy ${name} on`));
+    }
+  });
+
+  it("0002: 버킷 용량 상한은 20MB 이다", () => {
+    expect(sql).toMatch(/file_size_limit = 20971520/);
+  });
 });

@@ -4,8 +4,9 @@ import { cookies } from "next/headers";
 import { publicEnv } from "@/lib/env";
 
 export async function createClient() {
-  const env = publicEnv();
+  // cookies() 를 먼저 호출해 이 클라이언트를 쓰는 라우트를 동적 렌더링으로 고정한다(빌드 시 정적 생성 방지).
   const cookieStore = await cookies();
+  const env = publicEnv();
 
   return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     cookies: {
