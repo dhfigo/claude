@@ -118,8 +118,11 @@ npm run build        # 프로덕션 빌드
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
 npm test             # 단위 테스트 (마스킹·결제 검증은 필수 커버)
+npm run test:db      # 로컬 Postgres 로 마이그레이션 전체 + RLS 검증 (Supabase 스텁 사용, 실환경 검증 아님)
 npx supabase db push # 마이그레이션 적용 (Supabase 설정 후, 승인 시에만)
 ```
+
+`test:db`는 로컬 Postgres 16이 필요하다(root 이면 `postgres` 사용자로 자동 전환). `supabase/tests/00_stubs.sql`의 `auth`·`storage` 스텁은 Supabase 동작의 근사치이므로, 통과해도 실환경에서의 `storage-api` 용량·MIME 강제, 로그인 메일, 실제 JWT 동작은 검증된 것이 아니다.
 
 의존성 고정 사유: `typescript-eslint`가 TypeScript `<6.1`, `eslint-plugin-react`가 ESLint 9까지만 호환된다. **TypeScript 6.0.x, ESLint 9.x를 유지**하고, 업그레이드는 호환 확인 후 별도 계획으로 진행한다.
 
