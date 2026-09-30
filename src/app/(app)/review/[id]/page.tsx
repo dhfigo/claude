@@ -17,6 +17,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
     .eq("id", id)
     .maybeSingle();
   if (!doc) notFound();
+  const { data: balance } = await supabase.rpc("credit_balance");
+  const credits = typeof balance === "number" ? balance : 0;
 
   return (
     <main>
@@ -25,7 +27,10 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         상태: {doc.status === "deleted" ? "원본 삭제 완료" : "원본 보관 중"}
         {doc.expires_at && doc.status !== "deleted" && ` (자동 삭제 예정: ${new Date(doc.expires_at).toLocaleString("ko-KR")})`}
       </p>
-      {doc.status === "uploaded" && <ReviewClient documentId={id} />}
+      <p>
+        보유 크레딧: {credits}개 (분석 1회에 1크레딧, 실패하면 돌려드립니다) · <a href="/credits">충전하기</a>
+      </p>
+      {doc.status === "uploaded" && <ReviewClient documentId={id} credits={credits} />}
     </main>
   );
 }

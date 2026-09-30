@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { STUCK_JOB_MINUTES } from "@/lib/analysis/limits";
 import { deleteOriginal } from "@/lib/documents/delete";
 import { supabaseDeletionPorts } from "@/lib/documents/ports";
+import { paymentsEnv } from "@/lib/payments/config";
+import { createPaymentDeps } from "@/lib/payments/server";
+import { reconcilePendingOrders } from "@/lib/payments/toss/reconcile";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +28,9 @@ async function reapStuckJobs(admin: ReturnType<typeof createAdminClient>): Promi
     .update({ status: "failed", error_code: "timeout", updated_at: new Date().toISOString() })
     .in("status", ["queued", "running"])
     .lt("updated_at", cutoff)
-    .select("document_id");
+    .select("id, document_id");
   for (const row of data ?? []) {
+    await admin.rpc("refund_analysis_credit", { p_job: row.id });
     await admin.from("documents").update({ status: "uploaded" }).eq("id", row.document_id).eq("status", "processing");
   }
   return data?.length ?? 0;
@@ -40,6 +44,15 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
   const reaped = await reapStuckJobs(admin);
+  // 결제가 열려 있을 때만 주문 대사를 한다. 실패해도 원본 삭제는 계속한다.
+  let orders: { checked: number; completed: number; failed: number; skipped: number } | null = null;
+  if (paymentsEnv().enabled) {
+    try {
+      orders = await reconcilePendingOrders(createPaymentDeps());
+    } catch {
+      console.error("reconcile_error");
+    }
+  }
   const { data, error } = await admin
     .from("documents")
     .select("id, storage_path")
@@ -58,5 +71,6 @@ export async function GET(request: Request) {
     deleted,
     failed: (data?.length ?? 0) - deleted,
     reapedJobs: reaped,
+    orders,
   });
 }

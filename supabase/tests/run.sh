@@ -8,7 +8,9 @@ DB=portfolio_rls_test
 if [ "$(id -u)" = "0" ]; then exec runuser -u postgres -- "$0" "$@"; fi
 
 psql -q -d postgres -c "drop database if exists $DB" -c "create database $DB"
-for f in supabase/tests/00_stubs.sql supabase/migrations/*.sql supabase/tests/10_rls.sql; do
+for f in supabase/tests/00_stubs.sql supabase/migrations/*.sql supabase/tests/10_rls.sql supabase/tests/20_payments.sql; do
   echo "== $f"
   psql -q -v ON_ERROR_STOP=1 -o /dev/null -d "$DB" -f "$f" 2>&1 | sed -e "s/^psql:[^ ]* //" -e "s/^NOTICE:  //"
 done
+echo "== supabase/tests/30_concurrency.sh"
+supabase/tests/30_concurrency.sh "$DB"

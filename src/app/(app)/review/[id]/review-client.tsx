@@ -12,7 +12,7 @@ function parseTerms(text: string): string[] {
     .filter(Boolean);
 }
 
-export function ReviewClient({ documentId }: { documentId: string }) {
+export function ReviewClient({ documentId, credits }: { documentId: string; credits: number }) {
   const router = useRouter();
   const [consent, setConsent] = useState(false);
   const [termsText, setTermsText] = useState("");
@@ -61,7 +61,7 @@ export function ReviewClient({ documentId }: { documentId: string }) {
         외부 AI 서비스(Anthropic)로 전송되는 것에 동의합니다. 미리보기에서 가려지지 않은 정보는 그대로 전송됩니다.
       </label>
       <p>
-        <button type="button" onClick={analyze} disabled={pending || !consent}>
+        <button type="button" onClick={analyze} disabled={pending || !consent || credits < 1}>
           분석 시작
         </button>
       </p>

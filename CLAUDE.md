@@ -2,7 +2,7 @@
 
 비개발 사무직(기획·영업·관리)이 업무 문서를 업로드하면, AI가 분석해 이력·성과 중심의 포트폴리오를 생성하는 **유료 판매용 웹서비스**.
 
-> 상태: 1단계 스캐폴딩, 2단계 Supabase 스키마·RLS, 3단계 업로드·마스킹·원본 삭제, 4단계 로그인(이메일 매직링크)·Claude 분석 구현. 마이그레이션 0001~0003은 원격 DB 미적용이며, 실제 Claude API 호출과 프롬프트 품질은 미검증이다. "디렉터리 구조"는 목표 구조이며 기능 구현에 따라 갱신한다.
+> 상태: 1단계 스캐폴딩, 2단계 Supabase 스키마·RLS, 3단계 업로드·마스킹·원본 삭제, 4단계 로그인·Claude 분석, 5단계 토스페이먼츠 크레딧 결제 구현. 마이그레이션 0001~0004는 원격 DB 미적용(로컬 Postgres 스텁으로만 검증)이며, 실제 Claude API·토스 API 호출과 프롬프트 품질은 미검증이다. "디렉터리 구조"는 목표 구조이며 기능 구현에 따라 갱신한다.
 
 ---
 
@@ -72,6 +72,31 @@
 - 결제 상태 머신: `pending → paid → (refunded | canceled | failed)`. 전이는 서버 함수 한 곳에서만.
 - 환불·취소 시 권한 회수 로직 동반. 카드정보는 저장하지 않는다.
 - 테스트 키와 라이브 키는 환경별로 분리하고, 라이브 키 사용 코드 변경은 반드시 별도 승인.
+
+### 4.1 구현 (5단계)
+
+- 과금 모델은 **크레딧 팩(선불)**: 분석 1회 = 1크레딧, 시작 시 차감, **모든 실패(거절 포함)는 전액 환급**. 잔액은 `credit_ledger`(추가 전용)의 합계이며, 주문당 구매·취소 1건, 작업당 차감·환급 1건을 유니크 인덱스로 보장한다.
+- 쓰기는 전부 `service_role` 전용 DB 함수(`start_analysis_job`, `complete_order`, `cancel_order`, `fail_order`, `refund_analysis_credit`, `grant_signup_credits`)가 한 트랜잭션으로 처리한다. 사용자에게는 조회 권한만 있다.
+- 흐름: `createOrderAction`(금액은 DB 상품 가격) → 결제창 → `/payments/success`가 **DB 금액으로** 승인(쿼리의 금액은 대조만) → `complete_order`. 토스의 승인 응답이 주문번호·금액·paymentKey·상태(DONE)와 다르면 지급하지 않는다.
+- 일시 오류(타임아웃·5xx·429)는 실패로 단정하지 않고 `pending`으로 둔다. 웹훅과 대사(`/api/cron/purge`, 15분 이상 pending)가 토스에 재조회해 정리한다. 승인이 거절돼도 재조회로 DONE 여부를 확인한 뒤에만 실패 처리한다.
+- 웹훅 본문은 신뢰하지 않는다. 우리 DB에 있는 주문일 때만 토스에 재조회하고 그 결과만 반영한다(모르는 주문은 토스 미호출).
+- 부분 취소(`PARTIAL_CANCELED`)는 회수 정책이 없어 자동 처리하지 않고 이벤트만 기록한다. 전액 취소는 크레딧을 회수하며, 이미 쓴 크레딧이 있으면 잔액이 음수가 되어 분석이 차단된다.
+- `orders`·`credit_ledger`는 계정 삭제 시 연쇄 삭제하지 않는다(`on delete restrict`). 계정 삭제 기능은 보관 의무와 익명화 방식을 먼저 정한 뒤 만든다(법무 확인 필요).
+- `PAYMENTS_ENABLED`(기본 false)로 열고, `SIGNUP_FREE_CREDITS`(기본 0)로 가입 무료 크레딧을 켠다. 가격표(`credit_packs`)는 마이그레이션에 값이 없으며 가격 확정 후 직접 입력한다.
+- 개발용 크레딧 지급: `insert into public.credit_ledger (user_id, delta, reason) values ('<user uuid>', 5, 'adjust');` (service_role 또는 SQL 편집기)
+
+### 4.2 토스 API 확인 상태
+
+| 항목 | 상태 |
+|---|---|
+| 승인 `POST /v1/payments/confirm`, Basic 인증, 본문 `paymentKey`·`orderId`·`amount` | 웹 검색으로 확인 |
+| 브라우저 SDK(`@tosspayments/tosspayments-sdk`): `orderId` 6~64자, `orderName` 100자, successUrl 쿼리에 `paymentKey`·`orderId`·`amount`, 금액 대조 후 승인 호출 | SDK 타입 주석으로 확인 |
+| 조회 경로(`/v1/payments/{paymentKey}`, `/v1/payments/orders/{orderId}`), 응답 필드(`status`·`totalAmount`·`approvedAt`)와 status 값, `Idempotency-Key` 지원, 웹훅 본문 구조(`eventType`·`data.paymentKey`·`data.orderId`) | **미확인(가정)**. 가정은 `src/lib/payments/toss/client.ts`·`webhook.ts`에 모여 있다. |
+| 웹훅 서명 검증, 재전송 정책, 취소 API, 승인 유효 시간 | **미확인**. 웹훅은 재조회로 검증하므로 서명에 의존하지 않는다. |
+| 결제창(`payment()`)과 결제위젯은 **발급받는 클라이언트 키 종류가 다르다**. 구현은 결제창(`payment()`) 기준이다. | 계약한 키 종류 확인 필요 |
+
+테스트(`src/lib/payments/**`)는 토스를 모킹하므로 "코드가 위 가정에 맞게 동작하는가"만 검증한다. 실제 토스 API와의 일치는 검증되지 않았다.
+
 
 ---
 
@@ -159,7 +184,7 @@ npx supabase db push # 마이그레이션 적용 (Supabase 설정 후, 승인 �
 | 원본 자동삭제 TTL | 24시간 (확정) | 완료 |
 | 원본 삭제 옵션 기본값 | 삭제 ON (확정, DB 기본값 true) | 완료 |
 | 허용 파일 형식·용량 상한 | PDF/DOCX/PPTX/XLSX/TXT, 20MB (확정) | 완료 |
-| 과금 모델 (건당 / 구독 / 크레딧) | TBD | 결제 구현 전 |
+| 과금 모델 | 크레딧 팩(선불) (확정). 가격표·환불 정책·가입 무료 크레딧은 미정 | 가격은 원가 실측 후 |
 | Claude API 데이터 보존·학습 조건 확인 | 미확인 | 배포 전 |
 | 개인정보처리방침·이용약관 | 미작성 | 유료 출시 전 |
 | 내보내기 형식 (PDF / DOCX / 웹 링크) | TBD | 편집 기능 설계 시 |

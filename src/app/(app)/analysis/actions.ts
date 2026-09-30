@@ -22,6 +22,16 @@ const schema = z.object({
   consent: z.literal(true),
 });
 
+function startErrorMessage(code: string | undefined, message: string | undefined): string {
+  if (code === "P0001" && message?.includes("insufficient_credits")) {
+    return "크레딧이 부족합니다. 크레딧을 충전한 뒤 다시 시도해 주십시오.";
+  }
+  // 23505: 이미 진행 중인 작업이 있음(사용자당 동시 1건)
+  if (code === "23505") return "이미 진행 중인 분석이 있습니다. 완료된 뒤에 다시 시도해 주십시오.";
+  if (code === "P0002") return "원본 파일이 없거나 이미 처리되었습니다. 파일을 다시 올려 주십시오.";
+  return GENERIC_ERROR;
+}
+
 /**
  * 분석을 시작한다. 지정어(terms)는 이 요청의 메모리에서만 쓰이고 저장되지 않는다.
  * 실제 처리는 응답 이후(after)에 이어서 실행된다.
@@ -64,29 +74,21 @@ export async function startAnalysis(input: unknown): Promise<StartAnalysisResult
   }
 
   const admin = createAdminClient();
-  const { data: job, error } = await admin
-    .from("analysis_jobs")
-    .insert({
-      user_id: user.id,
-      document_id: doc.id,
-      model: config.model,
-      prompt_version: PROMPT_VERSION,
-    })
-    .select("id")
-    .single();
-  if (error || !job) {
-    // 23505: 이미 진행 중인 작업이 있음(사용자당 동시 1건)
-    return {
-      ok: false,
-      message:
-        error?.code === "23505"
-          ? "이미 진행 중인 분석이 있습니다. 완료된 뒤에 다시 시도해 주십시오."
-          : GENERIC_ERROR,
-    };
+  // 설정 오류(API 키 없음 등)가 크레딧 차감 뒤에 드러나지 않도록 클라이언트를 먼저 만든다.
+  const client = createAnalysisClient();
+  // 잔액 확인 + 1 크레딧 차감 + 작업 생성을 DB 함수가 한 트랜잭션으로 처리한다.
+  const { data: jobId, error } = await admin.rpc("start_analysis_job", {
+    p_user: user.id,
+    p_document: doc.id,
+    p_model: config.model,
+    p_prompt_version: PROMPT_VERSION,
+  });
+  if (error || typeof jobId !== "string") {
+    return { ok: false, message: startErrorMessage(error?.code, error?.message) };
   }
+  const job = { id: jobId };
 
   const ports = supabaseAnalysisPorts(admin, user.id);
-  const client = createAnalysisClient();
   after(() =>
     runAnalysisJob(
       { jobId: job.id, document: doc, terms },

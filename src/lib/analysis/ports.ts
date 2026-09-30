@@ -49,6 +49,8 @@ export function supabaseAnalysisPorts(admin: SupabaseClient, userId: string): An
         .from("analysis_jobs")
         .update({ status: "failed", error_code: code, updated_at: now() })
         .eq("id", jobId);
+      // 실패한 분석은 크레딧을 돌려준다(작업당 1회, DB 가 멱등 보장).
+      await admin.rpc("refund_analysis_credit", { p_job: jobId });
       // 원본이 남아 있으므로 다시 시도할 수 있도록 되돌린다.
       await admin.from("documents").update({ status: "uploaded" }).eq("id", documentId).neq("status", "deleted");
     },
