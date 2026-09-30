@@ -8,5 +8,5 @@ export default defineConfig({
       "server-only": path.resolve(__dirname, "src/test/server-only.ts"),
     },
   },
-  test: { environment: "node", include: ["src/**/*.test.ts"], passWithNoTests: true },
+  test: { environment: "node", include: ["src/**/*.test.ts", "scripts/**/*.test.ts"], passWithNoTests: true },
 });

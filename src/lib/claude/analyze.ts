@@ -20,6 +20,10 @@ export interface AnalysisResponse {
   stopReason: string | null;
   parsed: ClaudePortfolio | null;
   usage: { input: number; output: number };
+  // 원가·지연 실측용 선택 필드. 분석 로직은 사용하지 않는다.
+  servedModel?: string;
+  fallbackRan?: boolean;
+  thinkingTokens?: number | null;
 }
 
 /** SDK 를 감싸는 얇은 경계. 테스트에서는 가짜로 교체한다. */

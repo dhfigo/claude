@@ -10,11 +10,11 @@ import { ClaudePortfolioSchema } from "./schema";
  *  - tool_choice 강제, assistant prefill: 거부 (구조화 출력으로 대체)
  * fallbacks "default": 안전 분류기가 거절하면 서버가 권장 모델로 재실행한다.
  */
-export function buildParseParams(config: AnalysisConfig, sanitizedText: string) {
+export function buildParseParams(config: AnalysisConfig, sanitizedText: string, extraBetas: string[] = []) {
   return {
     model: config.model,
     max_tokens: config.maxOutputTokens,
-    betas: ["server-side-fallback-2026-07-01"],
+    betas: ["server-side-fallback-2026-07-01", ...extraBetas],
     fallbacks: "default" as const,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user" as const, content: buildUserMessage(sanitizedText) }],

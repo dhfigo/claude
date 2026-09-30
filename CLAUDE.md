@@ -144,6 +144,7 @@ npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
 npm test             # 단위 테스트 (마스킹·결제 검증은 필수 커버)
 npm run test:db      # 로컬 Postgres 로 마이그레이션 전체 + RLS 검증 (Supabase 스텁 사용, 실환경 검증 아님)
+SMOKE_STAGE=1 npm run smoke # 실제 API 스모크 테스트(유료, 단계별 승인 후에만. SMOKE_DRY_RUN=1 이면 키 없이 계획만 출력)
 npx supabase db push # 마이그레이션 적용 (Supabase 설정 후, 승인 시에만)
 ```
 
@@ -213,3 +214,14 @@ npx supabase db push # 마이그레이션 적용 (Supabase 설정 후, 승인 �
 - 금액 마스킹이 기본 ON이라 정량 성과가 토큰으로 남는다. 제품 가치와 기밀 보호가 충돌하는 지점이며 해결되지 않았다.
 - 비용 방어: `ANALYSIS_ENABLED`(기본 false), 일일 한도(`ANALYSIS_DAILY_LIMIT`, 기본 3), 사용자당 동시 1건(DB 부분 유니크 인덱스). 결제 연동(5단계) 전에는 공개 배포하지 않는다.
 - 미검증: 실제 API 호출, 프롬프트 재현율·환각률(`portfolio.v1`), `after()`의 요금제별 실행 시간 한도(`maxDuration = 300`은 가정값).
+
+---
+
+## 13. API 스모크 테스트 (원가·지연 실측)
+
+- 목적: 분석당 원가(입력·출력·thinking), 한국어 토큰 비율, 지연시간, 스키마 성공률, 거절·fallback 발생률을 **실측**해 가격표·입력 상한·`maxDuration`을 정한다. 품질 평가가 아니다(6문서, 채점 기준 없음).
+- 단계: 1(요청 형태 검증 1건 + 토큰 측정, 산술 최악 $0.34) → 2(Opus 5.5/medium, 6문서) → 3(Sonnet 5.5/medium) → 4(Opus 5.5/high, 소·중형). **각 단계 전에 사용자 승인**을 받고, 누적 상한은 `SMOKE_BUDGET_USD`(기본 $10)다.
+- 안전장치: 호출 전에 (측정 입력 토큰 × 단가 + `max_tokens` × 단가)를 계산해 남은 예산을 넘으면 호출하지 않는다. API가 400·401·403·404로 거절하면 즉시 중단한다. 결과(`scripts/smoke/out/`)와 실제 문서(`scripts/smoke/fixtures/`)는 `.gitignore` 대상이며, 결과에는 본문 없이 식별자·수치만 남는다.
+- 실제 문서를 쓰려면 `scripts/smoke/fixtures/`에 파일을 넣고, 가릴 단어를 `terms.txt`에 한 줄씩 적는다. 없으면 합성 문서 6건을 쓴다. Anthropic의 데이터 보존·학습 조건이 확인되기 전에는 기밀 문서를 쓰지 않는다.
+- 검증 범위: 요청 형태(경로·헤더·본문)는 로컬 모의 서버로 확인했다(`scripts/smoke/wire.test.ts`). **실제 API가 이 요청을 받아들이는지는 단계 1 전까지 미검증**이다. 단가는 공식 가격 문서에서 2026-09-30에 조회한 값이다.
+- 측정 결과(미실시): 단계 1 이후 이 절에 기록한다.
